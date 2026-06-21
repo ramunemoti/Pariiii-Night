@@ -217,7 +217,25 @@
 
 // パリィ効果音の読み込み設定
 const parrySound = new Audio('parry.mp3');
-parrySound.volume = 0.5; // 音量（0.0 〜 1.0 で調整できます）
+parrySound.volume = 0.7; // 音量（0.0 〜 1.0 で調整できます）
+
+const killSound = new Audio('kill.mp3'); // 👈 これを追加！
+killSound.volume = 0.5;                  // 音量（お好みで調整）
+
+
+const ultSound = new Audio('ult.mp3');   // 👈 これを追加！
+ultSound.volume = 1.0;                  // 音量（大技なので少し大きめがおすすめ）
+
+
+const damageSound = new Audio('damage.mp3'); // 👈 これを追加！
+damageSound.volume = 0.2;                    // 音量（お好みで調整）
+
+
+
+// 🎵 BGMの設定
+const bgm = new Audio('bgm.mp3'); // 👈 あなたのBGMファイル名に合わせてね
+bgm.volume = 0.2;                 // 効果音より少し小さめ（30%）がおすすめ
+bgm.loop = true;                  // 👈 これで自動的にループ再生になります！
 
 
 
@@ -235,7 +253,7 @@ parrySound.volume = 0.5; // 音量（0.0 〜 1.0 で調整できます）
         window.addEventListener('resize', resize);
         setTimeout(resize, 100);
 
-        let gameState = "battle"; 
+let gameState = "title";
         let wave = 1; 
         let enemiesSpawnedInWave = 0;
         let totalEnemiesForWave = 15;
@@ -267,6 +285,38 @@ let parrySkills = {
         let gameOver = false; let mouseX = 400, mouseY = 500;
 
         let currentReflexFiredInFrame = 0;
+
+
+// 画面が一度クリックされたらゲーム開始
+window.addEventListener('click', () => {
+
+    if (gameState === "title") {
+
+        // ゲーム状態を初期化
+        resetGame();
+
+        // バトル開始
+        gameState = "battle";
+
+        // BGM開始
+        if (typeof bgm !== 'undefined') {
+            bgm.currentTime = 0;
+            bgm.play().catch(e => console.log("BGM再生エラー:", e));
+        }
+
+        // 音声許可解除
+        if (typeof damageSound !== 'undefined') {
+            damageSound.play().then(() => {
+                damageSound.pause();
+                damageSound.currentTime = 0;
+            }).catch(e => console.log("音声解放待ち...", e));
+        }
+    }
+
+});
+
+
+
 
         window.addEventListener('mousemove', (e) => {
             const rect = canvas.getBoundingClientRect();
@@ -314,6 +364,12 @@ function activateUltimate() {
 
     player.ultGauge = 0;
 
+    // 🔊 【ここに追記！】ウルトを発動した瞬間の音を鳴らす
+    if (typeof ultSound !== 'undefined') {
+        ultSound.currentTime = 0; // 連続で押されたときのために巻き戻す
+        ultSound.play();
+    }
+
     juice.flashTimer = 12;
     juice.shakeTimer = 20;
     juice.slowmoTimer = 0;
@@ -360,6 +416,13 @@ function activateUltimate() {
                 8
             );
 
+            // ウルトで敵を倒したときの撃破音
+            if (typeof killSound !== 'undefined') {
+                let cloneKill = killSound.cloneNode(true);
+                cloneKill.volume = killSound.volume;
+                cloneKill.play();
+            }
+
             enemies.splice(i,1);
 
             if(e === boss){
@@ -370,8 +433,6 @@ function activateUltimate() {
         }
     }
 }
-
-
 
 
 
@@ -741,7 +802,7 @@ else if (type === 'magnet') {
                 
                 if (dist < hitRadius + laserWidth / 2) {
                     // ダメージアップ（基礎攻撃力 × レベル）
-                    let dmg = Math.round(player.baseDamage * parrySkills.laser.lv * 0.3);
+                    let dmg = Math.round(player.baseDamage * parrySkills.laser.lv * 0.1);
                     e.hp -= dmg;
                     createExplosion(e.x, e.y, '#00ffff', 10, 5);
                     createPopText(e.x, e.y, `${dmg}`, '#00ffff', true); // ダメージポップ
@@ -750,6 +811,15 @@ else if (type === 'magnet') {
                         setTimeout(() => {
                             dropMoney(e.x, e.y, boss === e ? 400 : 5);
                             createExplosion(e.x, e.y, e.color, 30, 8); // 撃破エフェクト強化
+
+
+// 🔊 【追加】レーザーで敵を倒したときの音
+                            if (typeof killSound !== 'undefined') {
+                                let cloneKill = killSound.cloneNode(true);
+                                cloneKill.volume = killSound.volume;
+                                cloneKill.play();
+                            }
+
                             let idx = enemies.indexOf(e);
                             if(idx !== -1) { enemies.splice(idx, 1); if(boss === e) boss = null; }
                             if (typeof checkWaveClear === "function") checkWaveClear();
@@ -768,7 +838,7 @@ else if (type === 'magnet') {
             playerBullets.push({
                 type: 'homing', x: bulletX, y: bulletY, vx: Math.cos(angle) * 6, vy: Math.sin(angle) * 6,
                 color: '#00ffff', size: 11, angle: angle, rotSpeed: 0.08 + Math.random()*0.04, life: 160,
-              damage: Math.round(player.baseDamage * parrySkills.homing.lv * 2)
+              damage: Math.round(player.baseDamage * parrySkills.homing.lv * 3)
             });
         }
     }
@@ -782,7 +852,7 @@ else if (type === 'magnet') {
             playerBullets.push({
                 type: 'straight', x: bulletX, y: bulletY, vx: Math.cos(angle) * 19, vy: Math.sin(angle) * 19,
                 color: '#00ffff', size: 41,
-              damage: Math.round(player.baseDamage * parrySkills.straight.lv * 3)
+              damage: Math.round(player.baseDamage * parrySkills.straight.lv * 5)
             });
         }
     }
@@ -804,7 +874,7 @@ else if (type === 'magnet') {
                 vy: Math.sin(angle) * 8,
                 color: '#ff6600',
                 size: 16,
-                damage: Math.round(player.baseDamage * parrySkills.magnum.lv * 2),
+                damage: Math.round(player.baseDamage * parrySkills.magnum.lv * 4),
                 timer: 60 // 1秒（60フレーム）の寿命タイマー
             });
         }
@@ -828,7 +898,7 @@ else if (type === 'magnet') {
                 vy: Math.sin(angle) * 12,
                 color: '#ff00ff',
                 size: 8,
-                damage: Math.round(player.baseDamage * parrySkills.fireworks.lv * 1.5),
+                damage: Math.round(player.baseDamage * parrySkills.fireworks.lv * 2.5),
                 chainCount: 0,    // 現在の連鎖回数
                 maxChain: 5,      // 最大5回連鎖
                 hitEnemies: []    // 重複ヒット防止用配列
@@ -870,16 +940,43 @@ else if (type === 'magnet') {
             document.getElementById('phase-overlay').classList.remove('show');
             document.getElementById('shop-lock-mask').style.display = 'flex';
             updateUI();
+ctx.fillStyle = '#000';
+ctx.fillRect(0,0,canvas.width,canvas.height);
+
+// 再スタート時BGM復帰
+if (typeof bgm !== 'undefined') {
+    bgm.currentTime = 0;
+    bgm.play().catch(e => console.log("BGM再生エラー:", e));
+}
         }
 
-  function loop() {
+function loop() {
     if (gameOver) {
+        if (typeof bgm !== 'undefined') bgm.pause(); // ゲームオーバーでBGMを止める
         requestAnimationFrame(loop);
         return;
     }
 
-    // タイムスケール（スローモーション）システム
-    // パリィ成功時、敵や敵の弾、エフェクトの移動速度が 1/4 (0.25) に低下します。自機と反射弾は等速！
+    // 👇 【ここを追加！】タイトル画面のときは、文字だけ描画してループをここで止める
+    if (typeof gameState !== 'undefined' && gameState === "title") {
+        // 画面を暗い紺色でクリア
+        ctx.fillStyle = 'rgba(2, 2, 5, 1.0)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // 「クリックでスタート」の文字を描画
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = '#00ffff';
+        ctx.fillStyle = '#00ffff';
+        ctx.font = "bold 28px Meiryo, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(" クリックでスタート", canvas.width / 2, canvas.height / 2);
+
+        requestAnimationFrame(loop);
+        return; // 👈 これより下の処理（敵の移動やタイマー減少など）にいかせない！
+    }
+
+    // タイムスケール（スローモーション）システム（ここから下は元のコードのまま）
     let ts = 1.0;
     if (juice.slowmoTimer > 0) {
         juice.slowmoTimer--;
@@ -899,11 +996,14 @@ else if (type === 'magnet') {
         ctx.translate(-canvas.width / 2, -canvas.height / 2);
     }
 
-    if (juice.flashTimer > 0) {
-        ctx.fillStyle = `rgba(220, 255, 255, ${juice.flashTimer / 8})`; ctx.fillRect(0, 0, canvas.width, canvas.height);
-    } else {
-        ctx.fillStyle = 'rgba(2, 2, 5, 0.28)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-    }
+  if (juice.flashTimer > 0) {
+    ctx.fillStyle = `rgba(220, 255, 255, ${juice.flashTimer / 8})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+} else {
+    // 毎フレーム完全クリア
+    ctx.fillStyle = '#020205';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
 
     if (juice.bossWarningTimer > 0) {
         juice.bossWarningTimer--;
@@ -1134,11 +1234,24 @@ if (player.parryRadius > 0) {
         player.parryCooldown = 0; 
         
         // 🔊 【連続再生対策】音をぶつ切りにせず重ねて鳴らす処理
-        if (typeof parrySound !== 'undefined') {
-            let cloneSound = parrySound.cloneNode(true); // 音源をクローン(複製)する
-            cloneSound.volume = parrySound.volume;       // 元の音量を引き継ぐ
-            cloneSound.play();                           // 複製した音を再生
-        }
+       // 🔊 【完全版】連続再生 ＆ ピッチランダム対策
+if (typeof parrySound !== 'undefined') {
+    let cloneSound = parrySound.cloneNode(true); // 音源をクローン
+    cloneSound.volume = parrySound.volume;       // 音量を引き継ぐ
+
+    // 🎲 ピッチを「あからさまに変わるレベル（0.6 〜 1.6）」に設定
+    let randomPitch = 0.6 + Math.random() * 1.0;
+
+    // 💡 再生が「始まってから」ピッチを変更することで、ブラウザのリセットを回避する
+    cloneSound.addEventListener('canplaythrough', () => {
+        cloneSound.playbackRate = randomPitch;
+    }, { once: true });
+
+    cloneSound.play();
+    
+    // 念のため再生直後にもう一度上書き（一部のブラウザ対策）
+    cloneSound.playbackRate = randomPitch; 
+}
 
         createParrySparks(b.x, b.y);
         triggerParryReflex(b.x, b.y, b.vx, b.vy);
@@ -1149,13 +1262,13 @@ if (player.parryRadius > 0) {
 
         }
 
-        let distToPlayer = Math.hypot(b.x - player.x, b.y - player.y);
+    let distToPlayer = Math.hypot(b.x - player.x, b.y - player.y);
         if (distToPlayer < player.size + b.size - 2) {
             player.hp -= 10; combo = 0; juice.shakeTimer = 15;
             createExplosion(player.x, player.y, '#ff0055', 12, 5);
             enemyBullets.splice(i, 1); updateUI();
 
-            if (player.hp <= 0) {
+                        if (player.hp <= 0) {
                 gameOver = true;
                 document.getElementById('gameover').style.display = 'block';
             }
@@ -1389,14 +1502,50 @@ if (enemies.length === 0 && enemiesSpawnedInWave >= totalEnemiesForWave && gameS
     }
 
    // ⚔️ 敵へのダメージ処理 ＆ 花火の即時連鎖（ヒット時発動版）ロジック
-   function damageEnemyInLoop(e, dmg, index, originalBullet) {
-    if (e.hp <= 0) return; // 既に死んでいる場合は重複処理を防止
+ // ⚔️ 敵へのダメージ処理 ＆ 花火の即時連鎖
+    function damageEnemyInLoop(e, dmg, index, originalBullet) {
+        if (e.hp <= 0) return; // 既に死んでいる場合は重複処理を防止
 
-    e.hp -= dmg;
+        e.hp -= dmg;
 
-    // 🛡️ ヒット時パーティクルの最大存在数リミッター
-    // 現在画面にあるパーティクルのうち、ヒット火花（色: '#00ffff'）の数をカウント
-    let currentHitParticles = particles.filter(p => p.color === '#00ffff').length;
+        // 🔊 【音量リミッター付き】ダメージ音の再生
+        if (typeof damageSound !== 'undefined') {
+            // 現在ゲーム内で再生中の damageSound（クローン含む）の数を数える
+            // ※「まだ再生が終わっていない（ended が false）」かつ「停止していない」ものをカウント
+            let activeSounds = 0;
+            
+            // 💡 ここがポイント：画面上の全オーディオ（または同時に鳴っている数）をチェック
+            // ただし、毎回全検索すると重いので、簡易的に「今フレームの再生制限」をかけるか、
+            // クローンされた音（audioタグ）の再生中ステータスを見ます。
+            
+            // 一番シンプルかつ確実に「多段ヒットの爆音」を防ぐ方法：
+            // レーザーの多段ヒットは「同じフレーム（瞬間）」に一気に発生するので、
+            // 1フレームあたり最大3回までしか鳴らないように、グローバルカウンター（または簡易リミッター）を挟みます。
+            
+            // 今回は、最も軽くて確実な「現在再生中のクローン数制限」を実装します。
+            // ページ内にある「再生中かつ damage.mp3 の音」を簡易カウント（または最大3重まで許可）
+            if (!window._activeSoundCount) window._activeSoundCount = 0;
+
+            if (window._activeSoundCount < 3) {
+                let cloneDamage = damageSound.cloneNode(true);
+                cloneDamage.volume = damageSound.volume;
+                
+                window._activeSoundCount++;
+                
+                // 音声が流れ終わったらカウンターを減らす
+                cloneDamage.addEventListener('ended', () => {
+                    window._activeSoundCount--;
+                });
+                
+                cloneDamage.play().catch(e => {
+                    console.log("再生エラー:", e);
+                    window._activeSoundCount--; // エラー時も安全に減らす
+                });
+            }
+        }
+
+        // 🛡️ ヒット時パーティクルの最大存在数リミッター
+        let currentHitParticles = particles.filter(p => p.color === '#00ffff').length;
 
     // 1回のヒットで6個出るので、「5ヒット分 ＝ 30個」を超えていなければ火花を出す
     if (currentHitParticles < (5 * 6)) {
@@ -1451,10 +1600,17 @@ if (enemies.length === 0 && enemiesSpawnedInWave >= totalEnemiesForWave && gameS
         }
     }
 
-    if (e.hp <= 0) {
+  if (e.hp <= 0) {
         dropMoney(e.x, e.y, e === boss ? 40 : 5);
         createExplosion(e.x, e.y, e.color, 3, 7);
         createPopText(e.x, e.y - 20, "DESTROYED", "#ff0055");
+
+        // 🔊 【ここに追記！】敵を倒した音を重ねて鳴らす
+        if (typeof killSound !== 'undefined') {
+            let cloneKill = killSound.cloneNode(true);
+            cloneKill.volume = killSound.volume;
+            cloneKill.play();
+        }
 
         // ボスなら強制ウェーブ終了
         if (e === boss) {
@@ -1473,7 +1629,7 @@ if (boss === null) {
    }
 }
 
-        resetGame();
+        
         loop();
     </script>
 </body>
