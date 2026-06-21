@@ -213,6 +213,17 @@
     </div>
 
     <script>
+
+
+// パリィ効果音の読み込み設定
+const parrySound = new Audio('parry.mp3');
+parrySound.volume = 0.5; // 音量（0.0 〜 1.0 で調整できます）
+
+
+
+
+
+
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
@@ -1104,29 +1115,38 @@ ctx.stroke();
             continue;
         }
 
-        // パリィ成功判定
-        if (player.parryRadius > 0) {
-            let distToPlayer = Math.hypot(b.x - player.x, b.y - player.y);
-if (distToPlayer <= player.parryRadius && distToPlayer >= player.parryRadius - 28) {
-    combo++;
+       // パリィ成功判定
+if (player.parryRadius > 0) {
+    let distToPlayer = Math.hypot(b.x - player.x, b.y - player.y);
+    if (distToPlayer <= player.parryRadius && distToPlayer >= player.parryRadius - 28) {
+        combo++;
 
-    player.ultGauge = Math.min(
-        player.ultGauge + 1,
-        player.ultMax
-    );
+        player.ultGauge = Math.min(
+            player.ultGauge + 1,
+            player.ultMax
+        );
 
-    console.log("ULT:", player.ultGauge);
+        console.log("ULT:", player.ultGauge);
 
-    juice.flashTimer = 5; 
-    juice.shakeTimer = 12;
-    juice.slowmoTimer = 22;
-    player.parryCooldown = 0; 
-    createParrySparks(b.x, b.y);
-    triggerParryReflex(b.x, b.y, b.vx, b.vy);
-    enemyBullets.splice(i, 1);
-    updateUI();
-    continue;
-}
+        juice.flashTimer = 5; 
+        juice.shakeTimer = 12;
+        juice.slowmoTimer = 22;
+        player.parryCooldown = 0; 
+        
+        // 🔊 【連続再生対策】音をぶつ切りにせず重ねて鳴らす処理
+        if (typeof parrySound !== 'undefined') {
+            let cloneSound = parrySound.cloneNode(true); // 音源をクローン(複製)する
+            cloneSound.volume = parrySound.volume;       // 元の音量を引き継ぐ
+            cloneSound.play();                           // 複製した音を再生
+        }
+
+        createParrySparks(b.x, b.y);
+        triggerParryReflex(b.x, b.y, b.vx, b.vy);
+        enemyBullets.splice(i, 1);
+        updateUI();
+        continue;
+    }
+
         }
 
         let distToPlayer = Math.hypot(b.x - player.x, b.y - player.y);
