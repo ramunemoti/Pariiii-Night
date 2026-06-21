@@ -1,0 +1,1460 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>パリィナイト</title>
+    <style>
+        body {
+            margin: 0; padding: 0; overflow: hidden;
+            background-color: #020205;
+            font-family: 'Meiryo', 'Courier New', sans-serif;
+            user-select: none; color: #00ffcc;
+            display: flex; height: 100vh;
+        }
+        /* サイドUI */
+        .side-panel {
+            width: 300px; height: 100%;
+            background: rgba(4, 4, 15, 0.9);
+            border-right: 2px solid #00ffcc;
+            border-left: 2px solid #00ffcc;
+            box-shadow: 0 0 20px rgba(0, 255, 204, 0.3);
+            box-sizing: border-box; padding: 20px;
+            display: flex; flex-direction: column; gap: 15px;
+            z-index: 10; transition: opacity 0.3s;
+        }
+        #left-panel { border-left: none; }
+        #right-panel { border-right: none; }
+        
+        #game-container { flex: 1; position: relative; height: 100%; background: #000; }
+        canvas { width: 100%; height: 100%; display: block; }
+
+        h2, h3 { margin: 0; text-align: center; font-weight: bold; letter-spacing: 1px; font-size: 16px;}
+        .neon-text-pink { color: #ff00ff; text-shadow: 0 0 10px #ff00ff; }
+        .neon-text-blue { color: #00ffcc; text-shadow: 0 0 10px #00ffcc; }
+        .neon-text-yellow { color: #ffff00; text-shadow: 0 0 10px #ffff00; }
+
+        .slot-container {
+            background: rgba(0, 0, 0, 0.5); border: 1px solid #00ffcc;
+            border-radius: 6px; padding: 10px; display: flex; flex-direction: column; gap: 8px;
+        }
+        .eq-item {
+            padding: 6px 10px; background: rgba(255,255,255,0.03); border: 1px solid #444;
+            border-radius: 4px; display: flex; justify-content: space-between; align-items: center;
+            font-size: 12px; cursor: pointer; color: #aaa;
+        }
+        .eq-item.active {
+            border-color: #00ffcc; color: #00ffcc; background: rgba(0,255,204,0.1);
+            box-shadow: 0 0 8px rgba(0,255,204,0.3);
+        }
+        .eq-item.locked {
+            opacity: 0.3; cursor: not-allowed; border-color: #222; color: #444;
+        }
+
+        .shop-item {
+            background: rgba(255, 0, 255, 0.03);
+            border: 1px solid #ff00ff; border-radius: 5px;
+            padding: 8px 10px; color: #fff; text-align: left;
+            cursor: pointer; transition: 0.2s;
+            display: flex; flex-direction: column; gap: 2px; font-size: 12px;
+        }
+        .shop-item:hover:not(.disabled) {
+            background: rgba(255, 0, 255, 0.15);
+            box-shadow: 0 0 10px #ff00ff;
+        }
+        .shop-item.disabled { opacity: 0.3; cursor: not-allowed; border-color: #555; }
+        .item-cost { color: #ffff00; font-weight: bold; }
+
+        .map-node {
+            border: 1px dashed #00ffcc; padding: 8px; text-align: center; font-size: 12px;
+            border-radius: 4px; background: rgba(0,255,204,0.02);
+        }
+        .map-node.active {
+            border-style: solid; background: rgba(0,255,204,0.15);
+            box-shadow: 0 0 10px #00ffcc;
+        }
+
+        #phase-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 5, 0.75); display: flex; justify-content: center;
+            align-items: center; flex-direction: column; pointer-events: none; opacity: 0;
+            transition: opacity 0.4s; z-index: 5;
+        }
+        #phase-overlay.show { opacity: 1; }
+
+        #next-wave-btn {
+            background: #ff00ff; color: #fff; border: none; padding: 12px 30px;
+            font-size: 18px; font-family: inherit; font-weight: bold; border-radius: 5px;
+            cursor: pointer; box-shadow: 0 0 15px #ff00ff; transition: 0.2s;
+            margin-top: 15px; display: none; pointer-events: auto;
+        }
+        #next-wave-btn:hover { background: #ff33ff; box-shadow: 0 0 25px #ff00ff; }
+
+        .panel-mask {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); display: flex; justify-content: center;
+            align-items: center; color: #ff00ff; font-weight: bold; font-size: 14px;
+            z-index: 15; text-align: center; pointer-events: auto; flex-direction: column;
+        }
+
+        #gameover {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: #ff0055; text-shadow: 0 0 20px #ff0055; font-size: 40px;
+            font-weight: bold; display: none; text-align: center; cursor: pointer; z-index: 20;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="side-panel" id="left-panel">
+        <h2 class="neon-text-blue">== ステータス ==</h2>
+        <div style="font-size:14px; line-height:1.8;">
+            HP: <span id="hp" style="color:#ff0055; font-weight:bold;">100</span> / <span id="maxHp">100</span><br>
+            所持金 : <span id="money" class="neon-text-yellow">$0</span><br>
+            連続パリィ: <span id="combo" class="neon-text-pink">0</span> 回<br>
+             <span id="maxReflex" style="color:#000000; font-weight:bold;">　</span> 
+        </div>
+        <hr style="border-color:#00ffcc; margin: 5px 0;">
+        <h3 class="neon-text-blue">進行マップ</h3>
+        <div id="map-container" style="display:flex; flex-direction:column; gap:8px;">
+            <div class="map-node" id="node-3">レイヤー 03: ボス (WAVE 10)</div>
+            <div class="map-node" id="node-2">レイヤー 02:  (WAVE 05)</div>
+            <div class="map-node" id="node-1" class="map-node active">レイヤー 01:  (WAVE 01)</div>
+        </div>
+        <div style="font-size:11px; color:#aaa; margin-top:auto; text-align:center; line-height:1.5;">
+            【操作方法】<br>
+マウス操作<br>
+左クリック：パリィ<br>
+右クリック:パリエネルギー放出<br>
+  　　　　　　<br>
+チャキンチャキンチャキンチャキン<br>
+パリィすればするほどパリエネルギーが溜まる<br>
+ある程度溜め切ればパリエネルギーを放出できる<br>
+バトルステージ範囲内すべてに<br>
+波状攻撃を放つことができると言われている<br>
+
+
+<br>
+            
+        </div>
+    </div>
+
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div id="gameover" onclick="resetGame()">敗北<br><span style="font-size:18px; color:#fff;">クリックして再スタート</span></div>
+        
+        <div id="phase-overlay">
+            <h1 id="phase-title" class="neon-text-blue" style="font-size: 36px; margin: 0;">WAVE 1 クリア</h1>
+            <p id="phase-sub" style="color: #fff; margin: 5px 0;">ウェーブクリア。ショップフェーズ移行。</p>
+            <button id="next-wave-btn" onclick="startNextWave()">次のウェーブへ</button>
+        </div>
+    </div>
+
+    <div class="side-panel" id="right-panel" style="position: relative;">
+        <div id="shop-lock-mask" class="panel-mask">
+            <br><span style="font-size:11px; color:#aaa; font-weight:normal; margin-top:5px;">ウェーブをクリアすると開放</span>
+        </div>
+
+        <h2 class="neon-text-blue" style="font-size:15px;">== 武器選択 (1種のみ) ==</h2>
+       <div class="slot-container">
+            <div class="eq-item active" id="eq-straight" onclick="selectEquip('straight')">
+                <span>■ ストレート弾</span><span id="state-straight">装備中</span>
+            </div>
+            <div class="eq-item locked" id="eq-laser" onclick="selectEquip('laser')">
+                <span>■ レーザー回路</span><span id="state-laser">未開放</span>
+            </div>
+            <div class="eq-item locked" id="eq-homing" onclick="selectEquip('homing')">
+                <span>■ 追尾ミサイル</span><span id="state-homing">未開放</span>
+            </div>
+            <div class="eq-item locked" id="eq-magnum" onclick="selectEquip('magnum')">
+                <span>■ マグナム弾</span><span id="state-magnum">未開放</span>
+            </div>
+            <div class="eq-item locked" id="eq-fireworks" onclick="selectEquip('fireworks')">
+                <span>■ 花火弾</span><span id="state-fireworks">未開放</span>
+            </div>
+        </div>
+
+        <h2 class="neon-text-pink" style="font-size:15px; margin-top: 5px;">== ショップ ==</h2>
+        
+        <div style="display:flex; flex-direction:column; gap:8px; overflow-y:auto; padding-right:2px;">
+            <div class="shop-item" onclick="buyItem('hp')">
+                <span>[ステータス] 最大HP +25 (全回復)</span>
+                <span class="item-cost" id="cost-hp">$150</span>
+            </div>
+
+<div class="shop-item" onclick="buyItem('damage')">
+                <span>[ステータス] 基礎ダメージ増加</span>
+                <span class="item-cost" id="cost-damage">$200</span>
+            </div>
+                       <div class="shop-item" onclick="buyItem('magnet')">
+                <span>[ステータス] お金磁力アップ</span>
+                <span class="item-cost" id="cost-magnet">$150</span>
+            </div>
+            <div class="shop-item" onclick="buyItem('ref_straight')">
+                <span>[武器強化] ストレート弾弾数増加</span>
+                <span class="item-cost" id="cost-ref_straight">$200</span>
+            </div>
+           <div class="shop-item" onclick="buyItem('ref_laser')">
+                <span>[武器解放/強化] レーザー回路解放/弾数増加</span>
+                <span class="item-cost" id="cost-ref_laser">$1500</span>
+            </div>
+            <div class="shop-item" onclick="buyItem('ref_homing')">
+                <span>[武器解放/強化] 追尾ミサイル解放/弾数増加</span>
+                <span class="item-cost" id="cost-ref_homing">$2000</span>
+            </div>
+            <div class="shop-item" onclick="buyItem('ref_magnum')">
+                <span>[武器解放/強化] マグナム弾解放/弾数増加</span>
+                <span class="item-cost" id="cost-ref_magnum">$3000</span>
+            </div>
+            <div class="shop-item" onclick="buyItem('ref_fireworks')">
+                <span>[武器解放/強化] 花火弾解放/弾数増加</span>
+                <span class="item-cost" id="cost-ref_fireworks">$4500</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function resize() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+        }
+        window.addEventListener('resize', resize);
+        setTimeout(resize, 100);
+
+        let gameState = "battle"; 
+        let wave = 1; 
+        let enemiesSpawnedInWave = 0;
+        let totalEnemiesForWave = 15;
+
+        let player = {
+            x: 300, y: 500, size: 14, hp: 100, maxHp: 100, money: 0,
+            parryRadius: 0, maxParryRadius: 55, parryCooldown: 0, maxCooldownTime: 50, 
+            magnetRange: 150, maxReflexCount: 1 ,
+baseDamage: 1,          // ★初期の基礎ダメージ量
+    damageUpgradeCost: 100, // ★ショップでの最初の強化費用
+    damageLevel: 1,         // （任意）現在のレベル表示用
+        };
+let parrySkills = {
+            straight: { lv: 1, name: "ストレート" },
+            laser: { lv: 0, name: "レーザー" },
+            homing: { lv: 0, name: "ホーミング" },
+            magnum: { lv: 0, name: "マグナム" },
+            fireworks: { lv: 0, name: "花火" }
+        };
+        let currentEquipped = "straight";
+
+        let juice = { flashTimer: 0, slowmoTimer: 0, zoomTimer: 0, shakeTimer: 0, bossWarningTimer: 0 };
+        let boss = null;
+
+        let prices = { hp: 150, damage: 200, magnet: 150, ref_straight: 200, ref_laser: 1500, ref_homing: 2000, ref_magnum: 3000, ref_fireworks: 4500 };
+
+        let combo = 0; let comboTimer = 0;
+        let enemies = [], enemyBullets = [], playerBullets = [], particles = [], texts = [], dropItems = [];
+        let gameOver = false; let mouseX = 400, mouseY = 500;
+
+        let currentReflexFiredInFrame = 0;
+
+        window.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = e.clientX - rect.left;
+            mouseY = e.clientY - rect.top;
+        });
+
+      window.addEventListener('mousedown', (e) => {
+
+    // 左クリック
+    if (e.button === 0) {
+
+        if (
+            gameOver ||
+            gameState !== "battle" ||
+            player.parryCooldown > 0
+        ) return;
+
+        player.parryRadius = 1;
+        player.parryCooldown = player.maxCooldownTime;
+    }
+
+    // 右クリック
+    if (e.button === 2) {
+
+        if (player.ultGauge < player.ultMax) return;
+
+        activateUlt();
+    }
+
+});
+
+
+window.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+
+    if (gameOver || gameState !== "battle") return;
+    if (player.ultGauge < player.ultMax) return;
+
+    activateUltimate();
+});
+
+
+function activateUltimate() {
+
+    player.ultGauge = 0;
+
+    juice.flashTimer = 12;
+    juice.shakeTimer = 20;
+    juice.slowmoTimer = 0;
+
+    // 全画面パリィ衝撃波
+    particles.push({
+        type: 'ring',
+        x: player.x,
+        y: player.y,
+        radius: 10,
+        maxRadius: 1400,
+        lineWidth: 10,
+        color: '#00ffff',
+        rgb: '0,255,255',
+        alpha: 1,
+        decay: 0.01,
+        speed: 25
+    });
+
+    // 全弾消し
+    enemyBullets.length = 0;
+
+    // 全敵ダメージ
+    for(let i = enemies.length - 1; i >= 0; i--) {
+
+        let e = enemies[i];
+
+        let dmg = Math.round(player.baseDamage * 10);
+
+        e.hp -= dmg;
+
+        createExplosion(e.x, e.y, '#00ffff', 20, 6);
+        createPopText(e.x, e.y, `${dmg}`, '#00ffff', true);
+
+        if(e.hp <= 0){
+
+            dropMoney(e.x, e.y, e === boss ? 400 : 5);
+
+            createExplosion(
+                e.x,
+                e.y,
+                e.color,
+                40,
+                8
+            );
+
+            enemies.splice(i,1);
+
+            if(e === boss){
+                boss = null;
+                endBattlePhase();
+                return;
+            }
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
+        function spawnEnemy() {
+            if (gameOver || gameState !== "battle" || juice.bossWarningTimer > 0) return;
+            
+            if (wave === 10) {
+                if (!boss && enemiesSpawnedInWave === 0) {
+                    juice.bossWarningTimer = 180;
+                    enemiesSpawnedInWave++;
+                }
+                return;
+            }
+
+            if (enemiesSpawnedInWave >= totalEnemiesForWave) {
+                if (enemies.length === 0) endBattlePhase();
+                return;
+            }
+
+            if (enemies.length < 15 + Math.floor(wave/2)) {
+                let rand = Math.random();
+                let type = "normal";
+                let color = '#ff0055';
+                let hp = 40 + wave * 50; 
+                let size = 24;
+
+                if (rand > 0.75) {
+                    type = "spreader"; 
+                    color = '#00ff55';
+                    hp = 60 + wave * 50;
+                } else if (rand > 0.5) {
+                    type = "hunter"; 
+                    color = '#ff5500';
+                    hp = 50 + wave * 50;
+                } else if (rand > 0.3) {
+                    type = "stalker"; 
+                    color = '#ff00ff';
+                    size = 20;
+                    hp = 40 + wave * 50;
+                }
+
+                enemies.push({
+                    x: Math.random() * (canvas.width - 60) + 30, y: Math.random() * (canvas.height * 0.2) + 40,
+                    vx: (Math.random() - 0.5) * (2 + wave * 0.2), vy: (Math.random() - 0.5) * 1.5,
+                    size: size, hp: hp, maxHp: hp, shootCooldown: Math.random() * 40 + 20,
+                    type: type, color: color
+                });
+                enemiesSpawnedInWave++;
+            }
+        }
+        setInterval(spawnEnemy, 800);
+
+        function spawnBoss() {
+            boss = {
+    x: canvas.width / 2,
+    y: -120,
+    targetY: canvas.height * 0.22,
+
+    vx: 0,
+    vy: 0,
+
+    size: 85,
+    hp: 20000 + wave * 1500,
+    maxHp: 20000 + wave * 1500,
+    shootCooldown: 50,
+    patternTimer: 0,
+    color: '#ff0033',
+    state: 'intro'
+};
+            enemies.push(boss);
+        }
+
+        function endBattlePhase() {
+            gameState = "shop";
+            document.getElementById('shop-lock-mask').style.display = 'none';
+            const overlay = document.getElementById('phase-overlay');
+            document.getElementById('phase-title').innerText = `WAVE ${wave} クリア`;
+            document.getElementById('phase-sub').innerText = "ウェーブクリア。ショップでアップグレード可能。";
+            document.getElementById('next-wave-btn').style.display = 'block';
+            overlay.classList.add('show');
+            updateUI();
+        }
+
+        function startNextWave() {
+            wave++;
+            enemiesSpawnedInWave = 0;
+            totalEnemiesForWave = 5 + wave * 3;
+            boss = null;
+            enemyBullets = []; playerBullets = []; particles = []; texts = []; dropItems = [];
+
+            gameState = "battle";
+            document.getElementById('shop-lock-mask').style.display = 'flex';
+            document.getElementById('phase-overlay').classList.remove('show');
+            document.getElementById('next-wave-btn').style.display = 'none';
+            updateUI();
+        }
+
+        function dropMoney(x, y, count) {
+            for(let i=0; i<count; i++) {
+                dropItems.push({
+                    x: x, y: y, vx: (Math.random() - 0.5) * 6, vy: (Math.random() - 0.5) * 6,
+                    size: 6, color: '#ffff00', value: 40
+                });
+            }
+        }
+
+        // パリィ火花パーティクル（50個に増量＋色調調整で爽快感アップ）
+        function createParrySparks(x, y) {
+            for (let i = 0; i < 50; i++) {
+                let angle = Math.random() * Math.PI * 2;
+                let speed = Math.random() * 12 + 6;
+                particles.push({
+                    type: 'spark', x: x, y: y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+                    size: Math.random() * 4 + 1.5, color: i % 2 === 0 ? '#00ffff' : '#ffffff', alpha: 1, decay: 0.03
+                });
+            }
+            // 純白のショックウェーブリングを追加
+            particles.push({
+                type: 'ring', x: x, y: y, radius: 5, maxRadius: 65, lineWidth: 4, color: '#ffffff', alpha: 1, decay: 0.05
+            });
+        }
+
+      // 敵へのヒット時・撃破時の爆散エフェクトを劇的に美しくする
+// 敵へのヒット・撃破エフェクトを「水色＆白」ベースの極上ネオンバーストに染め上げる
+function createExplosion(x, y, color, count=12, speed=5) {
+    // ヒット時・撃破時の粒子数をブースト
+    let finalCount = Math.max(count * 3.5, 25); 
+    let finalSpeed = speed * 1.6;
+
+    // 1. 水色と白のグラデーション・プラズマ・バースト
+    for (let i = 0; i < finalCount; i++) {
+        let angle = (Math.PI * 2 / finalCount) * i + (Math.random() - 0.5) * 0.4;
+        let pSpeed = (Math.random() * 0.8 + 0.3) * finalSpeed;
+        
+        let size = Math.random() > 0.85 ? (Math.random() * 6 + 3.5) : (Math.random() * 2 + 1);
+
+        // 【カラー改革】元の敵の色を無視し、純白・極薄水色・鮮やかシアンの3色を美しくブレンド
+        let pColor = '#00ffff'; // 基本はシアン（水色）
+        let rand = Math.random();
+        if (rand > 0.6) {
+            pColor = '#ffffff';  // 純白
+        } else if (rand > 0.3) {
+            pColor = '#a3ffff';  // 輝くようなパステルライトブルー
+        }
+
+        particles.push({
+            type: 'spark',
+            x: x,
+            y: y,
+            vx: Math.cos(angle) * pSpeed,
+            vy: Math.sin(angle) * pSpeed,
+            size: size,
+            color: pColor,
+            alpha: 1.0,
+            decay: Math.random() * 0.03 + 0.012
+        });
+    }
+
+    // 2. 空間を切り裂く「純白の閃光スパークライン」
+    let lineCount = count > 15 ? 8 : 4; 
+    for (let i = 0; i < lineCount; i++) {
+        let angle = (Math.PI * 2 / lineCount) * i + (Math.random() - 0.5) * 0.5;
+        let lSpeed = finalSpeed * 2.5; 
+
+        particles.push({
+            type: 'spark',
+            x: x,
+            y: y,
+            vx: Math.cos(angle) * lSpeed,
+            vy: Math.sin(angle) * lSpeed,
+            size: Math.random() * 2 + 2,
+            color: '#ffffff', 
+            alpha: 1.0,
+            decay: 0.07
+        });
+    }
+
+    // 3. 衝撃波リングも涼しげな水色と白のランダム仕様に
+    particles.push({
+        type: 'ring',
+        x: x,
+        y: y,
+        radius: 1,
+        maxRadius: finalCount * 1.8,
+        lineWidth: count > 15 ? 5 : 2,
+        color: Math.random() > 0.5 ? '#00ffff' : '#ffffff',
+        alpha: 1.0,
+        decay: count > 15 ? 0.035 : 0.065
+    });
+}
+     // ダメージポップ対応ポップテキスト
+function createPopText(x, y, text, color, isDamage = false) {
+    texts.push({ 
+        x: x + (Math.random() - 0.5) * 30, // 散らばり幅を少し広げた
+        y: y - 25, // 出現位置を敵の少し上に変更
+        text: text, 
+        color: color, 
+        alpha: 1, 
+        vy: isDamage ? -6.5 : -2.0, // ★上に弾け飛ぶ力を強化！
+        vx: isDamage ? (Math.random() - 0.5) * 4 : 0, // 横への飛び散りも強化
+        size: isDamage ? 24 : 14, // ★重要：計算できるように「数値だけ」にする
+        gravity: isDamage ? 0.28 : 0 // 重力も少し強めてメリハリをつける
+    });
+}
+
+        function selectEquip(type) {
+            if (parrySkills[type].lv === 0) return; 
+            currentEquipped = type;
+            updateUI();
+        }
+
+        function updateUI() {
+            document.getElementById('hp').innerText = Math.max(0, player.hp);
+            document.getElementById('maxHp').innerText = player.maxHp;
+            document.getElementById('money').innerText = player.money;
+            document.getElementById('combo').innerText = combo;
+            document.getElementById('maxReflex').innerText = player.maxReflexCount;
+
+            if (wave >= 10) setNodeActive(3);
+            else if (wave >= 5) setNodeActive(2);
+            else setNodeActive(1);
+
+           ['straight', 'laser', 'homing', 'magnum', 'fireworks'].forEach(type => {
+                const el = document.getElementById(`eq-${type}`);
+
+
+                const stateEl = document.getElementById(`state-${type}`);
+                const sk = parrySkills[type];
+
+                if (sk.lv === 0) {
+                    el.className = "eq-item locked";
+                    stateEl.innerText = "未開放";
+                } else {
+                    if (currentEquipped === type) {
+                        el.className = "eq-item active";
+                        stateEl.innerText = `装備中 (LV.${sk.lv})`;
+                    } else {
+                        el.className = "eq-item";
+                        stateEl.innerText = `待機中 (LV.${sk.lv})`;
+                    }
+                }
+            });
+
+          ['hp', 'damage', 'magnet', 'ref_straight', 'ref_laser', 'ref_homing', 'ref_magnum', 'ref_fireworks'].forEach(id => checkShopCost(id));
+        }
+
+
+function upgradeBaseDamage() {
+    if (player.money >= player.damageUpgradeCost) {
+        player.money -= player.damageUpgradeCost; // 資金を消費
+        
+        player.baseDamage += 1; // 💥 基礎ダメージを+1（または0.5などお好みで）
+        player.damageLevel += 1;
+        
+        // 次のアップグレード費用を計算（例：1.5倍ずつ高くなる）
+        player.damageUpgradeCost = Math.floor(player.damageUpgradeCost * 1.5);
+        
+        // UIの表記を更新
+        updateUI(); 
+        updateShopUI(); // ショップ専用の表示更新関数があれば
+    } else {
+        alert("資金が足りません！");
+    }
+}
+
+// UIのテキストを書き換える処理（既存の updateUI 内に追加すると良いです）
+function updateShopUI() {
+    document.getElementById('damage-lvl').innerText = player.damageLevel;
+    document.getElementById('damage-cost').innerText = player.damageUpgradeCost;
+}
+
+
+        function setNodeActive(num) {
+            [1,2,3].forEach(n => document.getElementById(`node-${n}`).classList.remove('active'));
+            document.getElementById(`node-${num}`).classList.add('active');
+        }
+
+        function checkShopCost(id) {
+            const btn = document.getElementById(`cost-${id}`).parentElement;
+            if (player.money < prices[id]) btn.classList.add('disabled');
+            else btn.classList.remove('disabled');
+        }
+
+        function buyItem(type) {
+            if (player.money < prices[type]) return;
+            player.money -= prices[type];
+
+            if (type === 'hp') {
+                player.maxHp += 25; player.hp = player.maxHp; prices.hp = Math.floor(prices.hp * 1.5);
+                document.getElementById('cost-hp').innerText = `$${prices.hp}`;
+            } 
+
+
+else if (type === 'damage') {
+        player.baseDamage += 1;
+        player.damageLevel += 1;
+        prices.damage = Math.floor(prices.damage * 1.5); // 次回価格を1.5倍に
+        document.getElementById('cost-damage').innerText = `$${prices.damage}`;
+    }
+
+else if (type === 'magnet') {
+                player.magnetRange += 50; prices.magnet = Math.floor(prices.magnet * 1.4);
+                document.getElementById('cost-magnet').innerText = `$${prices.magnet}`;
+            } else if (type === 'ref_straight') {
+                parrySkills.straight.lv = Math.min(5, parrySkills.straight.lv + 1); prices.ref_straight = Math.floor(prices.ref_straight * 1.5);
+                document.getElementById('cost-ref_straight').innerText = parrySkills.straight.lv >= 5 ? "MAX" : `$${prices.ref_straight}`;
+            } else if (type === 'ref_laser') {
+                if(parrySkills.laser.lv === 0) currentEquipped = "laser";
+                parrySkills.laser.lv = Math.min(5, parrySkills.laser.lv + 1); prices.ref_laser = Math.floor(prices.ref_laser * 1.5);
+                document.getElementById('cost-ref_laser').innerText = parrySkills.laser.lv >= 5 ? "MAX" : `$${prices.ref_laser}`;
+          } else if (type === 'ref_homing') {
+                if(parrySkills.homing.lv === 0) currentEquipped = "homing";
+                parrySkills.homing.lv = Math.min(5, parrySkills.homing.lv + 1); prices.ref_homing = Math.floor(prices.ref_homing * 1.5);
+                document.getElementById('cost-ref_homing').innerText = parrySkills.homing.lv >= 5 ? "MAX" : `$${prices.ref_homing}`;
+            } else if (type === 'ref_magnum') {
+                if(parrySkills.magnum.lv === 0) currentEquipped = "magnum";
+                parrySkills.magnum.lv = Math.min(5, parrySkills.magnum.lv + 1); prices.ref_magnum = Math.floor(prices.ref_magnum * 1.5);
+                document.getElementById('cost-ref_magnum').innerText = parrySkills.magnum.lv >= 5 ? "MAX" : `$${prices.ref_magnum}`;
+            } else if (type === 'ref_fireworks') {
+                if(parrySkills.fireworks.lv === 0) currentEquipped = "fireworks";
+                parrySkills.fireworks.lv = Math.min(5, parrySkills.fireworks.lv + 1); prices.ref_fireworks = Math.floor(prices.ref_fireworks * 1.5);
+                document.getElementById('cost-ref_fireworks').innerText = parrySkills.fireworks.lv >= 5 ? "MAX" : `$${prices.ref_fireworks}`;
+            }
+            createPopText(player.x, player.y - 30, "システム強化完了", "#ff00ff");
+            updateUI();
+        }
+
+      function triggerParryReflex(bulletX, bulletY, bulletVx, bulletVy) {
+    if (currentReflexFiredInFrame >= player.maxReflexCount) return; 
+    currentReflexFiredInFrame++;
+
+    let targetX = bulletX - bulletVx * 10, targetY = bulletY - bulletVy * 10;
+    if (enemies.length > 0) { targetX = enemies[0].x; targetY = enemies[0].y; }
+    let baseAngle = Math.atan2(targetY - bulletY, targetX - bulletX);
+
+    // 1. レーザー
+    if (currentEquipped === "laser" && parrySkills.laser.lv > 0) {
+        let count = parrySkills.laser.lv; // レベルの数だけレーザーを発射
+        let laserWidth = 20; // 👈 太さは一律（固定）にする
+
+        for (let i = 0; i < count; i++) {
+            // ストレート弾と同様に角度を扇状に散らす計算
+            let spread = 0.12 * (i - (count - 1) / 2);
+            let angle = baseAngle + spread;
+
+            // 描画・管理用にレーザーオブジェクトを追加
+            playerBullets.push({
+                type: 'laser', x: bulletX, y: bulletY, angle: angle,
+                width: laserWidth, timer: 16, maxTimer: 16, color: '#00ffff'
+            });
+
+            // 散らした各レーザーの角度(angle)ごとに敵の当たり判定を行う
+            enemies.forEach(e => {
+                let hitRadius = e === boss ? e.size : e.size / 2;
+                
+                // 直線の式を個別の angle に基づいて計算するためのダスターミナント用仮想ターゲット
+                let tX = bulletX + Math.cos(angle) * 1000;
+                let tY = bulletY + Math.sin(angle) * 1000;
+                
+                // 点（敵の位置）と直線（レーザー）の距離を計算
+                let dist = Math.abs((tY - bulletY) * e.x - (tX - bulletX) * e.y + tX * bulletY - tY * bulletX) / Math.hypot(tY - bulletY, tX - bulletX);
+                
+                if (dist < hitRadius + laserWidth / 2) {
+                    // ダメージアップ（基礎攻撃力 × レベル）
+                    let dmg = Math.round(player.baseDamage * parrySkills.laser.lv * 0.3);
+                    e.hp -= dmg;
+                    createExplosion(e.x, e.y, '#00ffff', 10, 5);
+                    createPopText(e.x, e.y, `${dmg}`, '#00ffff', true); // ダメージポップ
+                    
+                    if (e.hp <= 0) {
+                        setTimeout(() => {
+                            dropMoney(e.x, e.y, boss === e ? 400 : 5);
+                            createExplosion(e.x, e.y, e.color, 30, 8); // 撃破エフェクト強化
+                            let idx = enemies.indexOf(e);
+                            if(idx !== -1) { enemies.splice(idx, 1); if(boss === e) boss = null; }
+                            if (typeof checkWaveClear === "function") checkWaveClear();
+                        }, 1);
+                    }
+                }
+            });
+        }
+    }
+
+    // 2. ホーミング（サイズを11に強化）
+    if (currentEquipped === "homing" && parrySkills.homing.lv > 0) {
+        let count = 2 + parrySkills.homing.lv;
+        for (let i = 0; i < count; i++) {
+            let angle = baseAngle + (Math.PI * 2 / count) * i;
+            playerBullets.push({
+                type: 'homing', x: bulletX, y: bulletY, vx: Math.cos(angle) * 6, vy: Math.sin(angle) * 6,
+                color: '#00ffff', size: 11, angle: angle, rotSpeed: 0.08 + Math.random()*0.04, life: 160,
+              damage: Math.round(player.baseDamage * parrySkills.homing.lv * 2)
+            });
+        }
+    }
+
+    // 3. ストレート（サイズを11に強化）
+    if (currentEquipped === "straight" && parrySkills.straight.lv > 0) {
+        let count = parrySkills.straight.lv;
+        for (let i = 0; i < count; i++) {
+            let spread = 0.22 * (i - (count - 1) / 2);
+            let angle = baseAngle + spread;
+            playerBullets.push({
+                type: 'straight', x: bulletX, y: bulletY, vx: Math.cos(angle) * 19, vy: Math.sin(angle) * 19,
+                color: '#00ffff', size: 41,
+              damage: Math.round(player.baseDamage * parrySkills.straight.lv * 3)
+            });
+        }
+    }
+
+    // 4. マグナム (レベルに応じて扇状に複数発射 ＆ 1秒時限タイマー)
+    if (currentEquipped === "magnum" && parrySkills.magnum.lv > 0) {
+        let count = parrySkills.magnum.lv; // レベルの数だけ同時発射
+        let spreadWidth = 0.14; // 弾の広がり角度
+
+        for (let i = 0; i < count; i++) {
+            let spread = spreadWidth * (i - (count - 1) / 2);
+            let angle = baseAngle + spread;
+
+            playerBullets.push({
+                type: 'magnum',
+                x: bulletX,
+                y: bulletY,
+                vx: Math.cos(angle) * 8,
+                vy: Math.sin(angle) * 8,
+                color: '#ff6600',
+                size: 16,
+                damage: Math.round(player.baseDamage * parrySkills.magnum.lv * 2),
+                timer: 60 // 1秒（60フレーム）の寿命タイマー
+            });
+        }
+    }
+
+    // 5. 花火 (レベルに応じて同時発射数アップ ＆ 敵撃破時に連鎖)
+    if (currentEquipped === "fireworks" && parrySkills.fireworks.lv > 0) {
+        // レベル1: 1発、レベル2: 3発、レベル3: 5発 と奇数で綺麗に拡散
+        let count = 1 + (parrySkills.fireworks.lv - 1) * 2; 
+        let spreadWidth = 0.18; // 弾の広がり角度
+
+        for (let i = 0; i < count; i++) {
+            let spread = spreadWidth * (i - (count - 1) / 2);
+            let angle = baseAngle + spread;
+
+            playerBullets.push({
+                type: 'fireworks',
+                x: bulletX,
+                y: bulletY,
+                vx: Math.cos(angle) * 12,
+                vy: Math.sin(angle) * 12,
+                color: '#ff00ff',
+                size: 8,
+                damage: Math.round(player.baseDamage * parrySkills.fireworks.lv * 1.5),
+                chainCount: 0,    // 現在の連鎖回数
+                maxChain: 5,      // 最大5回連鎖
+                hitEnemies: []    // 重複ヒット防止用配列
+            });
+        }
+    }
+}
+        function resetGame() {
+            gameState = "battle"; wave = 1; enemiesSpawnedInWave = 0; totalEnemiesForWave = 5;
+           player = { 
+    x: canvas.width/2, 
+    y: canvas.height*0.7, 
+    size:14, 
+    hp:100, 
+    maxHp:100, 
+    baseDamage: 10,
+    damageLevel: 1,
+    money:0, 
+    parryRadius:0, 
+    maxParryRadius:55, 
+    parryCooldown:0, 
+    maxCooldownTime:50, 
+    magnetRange:150, 
+    maxReflexCount:1,
+
+    ultGauge: 0,
+    ultMax: 10
+};
+           parrySkills = { straight: { lv: 1 }, laser: { lv: 0 }, homing: { lv: 0 }, magnum: { lv: 0 }, fireworks: { lv: 0 } }; currentEquipped = "straight";
+            juice = { flashTimer: 0, slowmoTimer: 0, zoomTimer: 0, shakeTimer: 0, bossWarningTimer: 0 }; boss = null;
+          prices = { hp: 150, damage: 200, magnet: 150, ref_straight: 200, ref_laser: 1500, ref_homing: 2000, ref_magnum: 3000, ref_fireworks: 4500 };
+            
+         document.getElementById('cost-magnet').innerText = "$150";
+            document.getElementById('cost-ref_straight').innerText = "$200"; document.getElementById('cost-ref_laser').innerText = "$1500"; document.getElementById('cost-ref_homing').innerText = "$2000";
+            document.getElementById('cost-ref_magnum').innerText = "$3000"; document.getElementById('cost-ref_fireworks').innerText = "$4500";
+            
+            combo = 0; gameOver = false; enemies = []; enemyBullets = []; playerBullets = []; particles = []; texts = []; dropItems = [];
+            document.getElementById('gameover').style.display = 'none';
+            document.getElementById('phase-overlay').classList.remove('show');
+            document.getElementById('shop-lock-mask').style.display = 'flex';
+            updateUI();
+        }
+
+  function loop() {
+    if (gameOver) {
+        requestAnimationFrame(loop);
+        return;
+    }
+
+    // タイムスケール（スローモーション）システム
+    // パリィ成功時、敵や敵の弾、エフェクトの移動速度が 1/4 (0.25) に低下します。自機と反射弾は等速！
+    let ts = 1.0;
+    if (juice.slowmoTimer > 0) {
+        juice.slowmoTimer--;
+        ts = 0.25; 
+    }
+
+    if (juice.flashTimer > 0) juice.flashTimer--;
+    if (juice.zoomTimer > 0) juice.zoomTimer--;
+    if (juice.shakeTimer > 0) juice.shakeTimer--;
+
+    ctx.save();
+    if (juice.zoomTimer > 0 || juice.shakeTimer > 0) {
+        let dx = 0, dy = 0;
+        if (juice.shakeTimer > 0) { dx = (Math.random() - 0.5) * 16; dy = (Math.random() - 0.5) * 16; }
+        ctx.translate(canvas.width / 2 + dx, canvas.height / 2 + dy);
+        if (juice.zoomTimer > 0) ctx.scale(1.07, 1.07);
+        ctx.translate(-canvas.width / 2, -canvas.height / 2);
+    }
+
+    if (juice.flashTimer > 0) {
+        ctx.fillStyle = `rgba(220, 255, 255, ${juice.flashTimer / 8})`; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    } else {
+        ctx.fillStyle = 'rgba(2, 2, 5, 0.28)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    if (juice.bossWarningTimer > 0) {
+        juice.bossWarningTimer--;
+        if (Math.floor(juice.bossWarningTimer / 15) % 2 === 0) {
+            ctx.fillStyle = 'rgba(255, 0, 50, 0.18)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#ff0033'; ctx.font = "bold 26px Meiryo"; ctx.textAlign = "center";
+            ctx.fillText("⚠️ 警告: ボス 接近中 ⚠️", canvas.width / 2, canvas.height / 2);
+        }
+        if (juice.bossWarningTimer === 0) spawnBoss();
+    }
+
+    // プレイヤー位置補正（スローの影響を受けない）
+    player.x += (mouseX - player.x) * 0.22;
+    player.y += (mouseY - player.y) * 0.22;
+    
+    if(player.parryCooldown > 0) player.parryCooldown--;
+
+    let parryActive = false;
+    if (player.parryRadius > 0) {
+        player.parryRadius += 8; parryActive = true;
+        ctx.shadowBlur = 25; ctx.shadowColor = '#00ffcc';
+        ctx.strokeStyle = `rgba(0, 255, 204, ${1 - player.parryRadius / player.maxParryRadius})`;
+        ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(player.x, player.y, player.parryRadius, 0, Math.PI*2); ctx.stroke();
+        
+        if (player.parryRadius >= player.maxParryRadius) {
+            player.parryRadius = 0;
+        }
+    }
+
+    ctx.shadowBlur = 15; ctx.shadowColor = '#00ffcc'; ctx.fillStyle = '#00ffcc';
+    ctx.beginPath(); ctx.arc(player.x, player.y, player.size, 0, Math.PI*2); ctx.fill();
+
+    if (player.parryCooldown > 0) {
+    ctx.shadowBlur = 1;
+    ctx.shadowColor = '#ff0055';
+    ctx.strokeStyle = 'rgba(255, 0, 85, 0.6)';
+    ctx.lineWidth = 3;
+
+    ctx.beginPath();
+
+    let startAngle = -Math.PI / 2;
+    let endAngle =
+        startAngle +
+        (Math.PI * 2) *
+        (player.parryCooldown / player.maxCooldownTime);
+
+    ctx.arc(
+        player.x,
+        player.y,
+        player.size + 18,
+        startAngle,
+        endAngle
+    );
+
+    ctx.stroke();
+}
+
+// ← if の外へ出す
+
+ctx.shadowBlur = 10;
+ctx.shadowColor = '#00ffff';
+ctx.strokeStyle = '#00ffff';
+ctx.lineWidth = 4;
+
+ctx.beginPath();
+
+let ultEnd =
+    -Math.PI/2 +
+    Math.PI*2*(player.ultGauge/player.ultMax);
+
+ctx.arc(
+    player.x,
+    player.y,
+    player.size + 10,
+    -Math.PI/2,
+    ultEnd
+);
+
+ctx.stroke();
+
+    // 資金引き寄せ物理
+    for(let i = dropItems.length - 1; i >= 0; i--) {
+        let d = dropItems[i]; let dist = Math.hypot(player.x - d.x, player.y - d.y);
+        if (dist < player.magnetRange) {
+            let angle = Math.atan2(player.y - d.y, player.x - d.x);
+            d.vx += Math.cos(angle) * 1.8; d.vy += Math.sin(angle) * 1.8;
+        } else { d.vx *= 0.94; d.vy *= 0.94; }
+        d.x += d.vx * ts; d.y += d.vy * ts; // スロー適用
+
+        ctx.shadowBlur = 10; ctx.shadowColor = d.color; ctx.fillStyle = d.color;
+        ctx.fillRect(d.x - d.size/2, d.y - d.size/2, d.size, d.size);
+
+        if (dist < player.size + d.size) {
+            player.money += d.value; createExplosion(d.x, d.y, '#ffff00', 3, 2);
+            dropItems.splice(i, 1); updateUI();
+        }
+    }
+
+    currentReflexFiredInFrame = 0; 
+
+    // エネミー制御 (スロー適用)
+    for (let i = enemies.length - 1; i >= 0; i--) {
+        let e = enemies[i];
+        
+        if (e === boss && e.state === 'intro') {
+            e.y += (e.targetY - e.y) * 0.03 * ts;
+            if (Math.abs(e.y - e.targetY) < 2) e.state = 'active';
+        } else {
+            e.x += e.vx * ts; e.y += e.vy * ts;
+            if (e.x < e.size || e.x > canvas.width - e.size) e.vx *= -1;
+            if (e.y < 35 || e.y > canvas.height * 0.38) e.vy *= -1;
+
+            if (e.type === "stalker") {
+                e.vx += Math.sign(player.x - e.x) * 0.1 * ts;
+                e.vx = Math.max(-3.0, Math.min(3.0, e.vx));
+            }
+        }
+
+        ctx.shadowBlur = 15; ctx.shadowColor = e.color; ctx.strokeStyle = e.color;
+        ctx.lineWidth = e === boss ? 6 : 2;
+        if (e === boss) {
+            ctx.strokeRect(e.x - e.size, e.y - e.size, e.size * 2, e.size * 2);
+        } else {
+            ctx.strokeRect(e.x - e.size/2, e.y - e.size/2, e.size, e.size);
+        }
+
+        let barW = e === boss ? e.size * 2 : e.size * 1.5;
+        let barH = e === boss ? 8 : 4;
+        let barX = e === boss ? e.x - e.size : e.x - barW/2;
+        let barY = e === boss ? e.y - e.size - 22 : e.y - e.size/2 - 12;
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+        ctx.fillRect(barX, barY, barW, barH); 
+        ctx.fillStyle = e === boss ? '#ff0033' : '#ff3300';
+        ctx.fillRect(barX, barY, barW * (e.hp / e.maxHp), barH); 
+
+        if (gameState === "battle") {
+            e.shootCooldown -= ts; // クールダウンもスローに
+            if (e.shootCooldown <= 0) {
+                let angle = Math.atan2(player.y - e.y, player.x - e.x);
+                
+                if (e === boss) {
+                    e.patternTimer++;
+                    let phase = e.patternTimer % 4;
+                    if (phase === 0) { 
+                        for(let s=0; s<24; s++) { 
+                            let a=(Math.PI*2/24)*s + (e.patternTimer*0.1); 
+                            enemyBullets.push({ x:e.x, y:e.y, vx:Math.cos(a)*3.2, vy:Math.sin(a)*3.2, color:'#ff0033', size:6 }); 
+                        }
+                        e.shootCooldown = 20;
+                    } else if (phase === 1) { 
+                        for(let s=-1; s<=1; s++) {
+                            enemyBullets.push({ x:e.x, y:e.y, vx:Math.cos(angle + s*0.15)*7.0, vy:Math.sin(angle + s*0.15)*7.0, color:'#ffff00', size:14 });
+                        }
+                        e.shootCooldown = 20;
+                    } else if (phase === 2) { 
+                        for(let s=-4; s<=4; s++) { 
+                            let sAngle = angle + s * 0.12;
+                            enemyBullets.push({ x:e.x, y:e.y, vx:Math.cos(sAngle)*6.5, vy:Math.sin(sAngle)*6.5, color:'#00ffff', size:5 });
+                        }
+                        e.shootCooldown = 20;
+                    } else { 
+                        for(let s=0; s<16; s++) {
+                            let a = angle + (Math.PI*2/16)*s;
+                            enemyBullets.push({ x:e.x, y:e.y, vx:Math.cos(a)*4.5, vy:Math.sin(a)*4.5, color:'#ff00ff', size:6 });
+                        }
+                        e.shootCooldown = 20;
+                    }
+                } else {
+                    if (e.type === "spreader") {
+                        for(let s=0; s<6; s++) {
+                            let a = angle + (Math.PI*2/6)*s;
+                            enemyBullets.push({ x:e.x, y:e.y, vx:Math.cos(a)*3, vy:Math.sin(a)*3, color:e.color, size:5 });
+                        }
+                    } else if (e.type === "hunter") {
+                        enemyBullets.push({ x:e.x, y:e.y, vx:Math.cos(angle)*5.5, vy:Math.sin(angle)*5.5, color:e.color, size:6 });
+                    } else {
+                        enemyBullets.push({ x:e.x, y:e.y, vx:Math.cos(angle)*4, vy:Math.sin(angle)*4, color:e.color, size:5 });
+                    }
+                    e.shootCooldown = Math.random() * 40 + 40;
+                }
+            }
+        }
+    }
+
+    // 敵の弾 (スロー適用) ★美しい赤×白のネオン丸弾に統一！
+    for (let i = enemyBullets.length - 1; i >= 0; i--) {
+        let b = enemyBullets[i];
+        b.x += b.vx * ts; b.y += b.vy * ts;
+
+        // --- 敵の攻撃描画（ネオンサークル） ---
+        ctx.save();
+        ctx.shadowBlur = 12;
+        ctx.shadowColor = '#ff0033'; // 禍々しい赤ネオンの光彩
+
+        // 外枠（鮮やかな赤）
+        ctx.fillStyle = '#ff0033';
+        ctx.beginPath(); ctx.arc(b.x, b.y, b.size, 0, Math.PI * 2); ctx.fill();
+
+        // 内芯（クッキリ輝く白コア）
+        ctx.shadowBlur = 0; 
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath(); ctx.arc(b.x, b.y, b.size * 0.45, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+        // ------------------------------------
+
+        if (b.x < -20 || b.x > canvas.width + 20 || b.y < -20 || b.y > canvas.height + 20) {
+            enemyBullets.splice(i, 1);
+            continue;
+        }
+
+        // パリィ成功判定
+        if (player.parryRadius > 0) {
+            let distToPlayer = Math.hypot(b.x - player.x, b.y - player.y);
+if (distToPlayer <= player.parryRadius && distToPlayer >= player.parryRadius - 28) {
+    combo++;
+
+    player.ultGauge = Math.min(
+        player.ultGauge + 1,
+        player.ultMax
+    );
+
+    console.log("ULT:", player.ultGauge);
+
+    juice.flashTimer = 5; 
+    juice.shakeTimer = 12;
+    juice.slowmoTimer = 22;
+    player.parryCooldown = 0; 
+    createParrySparks(b.x, b.y);
+    triggerParryReflex(b.x, b.y, b.vx, b.vy);
+    enemyBullets.splice(i, 1);
+    updateUI();
+    continue;
+}
+        }
+
+        let distToPlayer = Math.hypot(b.x - player.x, b.y - player.y);
+        if (distToPlayer < player.size + b.size - 2) {
+            player.hp -= 10; combo = 0; juice.shakeTimer = 15;
+            createExplosion(player.x, player.y, '#ff0055', 12, 5);
+            enemyBullets.splice(i, 1); updateUI();
+
+            if (player.hp <= 0) {
+                gameOver = true;
+                document.getElementById('gameover').style.display = 'block';
+            }
+            continue;
+        }
+    }
+
+    // 反撃弾の更新 (※等速移動でスローを置き去りにする爽快演出)
+    for (let i = playerBullets.length - 1; i >= 0; i--) {
+        let b = playerBullets[i];
+        let bulletRemoved = false;
+
+        if (b.type === 'laser') {
+            b.timer--;
+            ctx.shadowBlur = 25; ctx.shadowColor = b.color;
+            ctx.strokeStyle = `rgba(0, 255, 255, ${b.timer / b.maxTimer})`;
+            ctx.lineWidth = b.width * (b.timer / b.maxTimer);
+            ctx.beginPath(); ctx.moveTo(b.x, b.y);
+            ctx.lineTo(b.x + Math.cos(b.angle) * 1200, b.y + Math.sin(b.angle) * 1200);
+            ctx.stroke();
+
+            // レーザーの当たり判定
+            for (let j = enemies.length - 1; j >= 0; j--) {
+                let e = enemies[j];
+                // 簡易線分と点（敵）の距離判定
+                let x1 = b.x, y1 = b.y;
+                let x2 = b.x + Math.cos(b.angle) * 1200, y2 = b.y + Math.sin(b.angle) * 1200;
+                let A = e.x - x1, B = e.y - y1, C = x2 - x1, D = y2 - y1;
+                let dot = A * C + B * D, len_sq = C * C + D * D, param = -1;
+                if (len_sq !== 0) param = dot / len_sq;
+                let xx, yy;
+                if (param < 0) { xx = x1; yy = y1; }
+                else if (param > 1) { xx = x2; yy = y2; }
+                else { xx = x1 + param * C; yy = y1 + param * D; }
+                let dist = Math.hypot(e.x - xx, e.y - yy);
+                if (dist < (e === boss ? e.size : e.size / 1.2) + b.width / 2) {
+                    let dmg = Math.round(player.baseDamage * 1.0);
+                    damageEnemyInLoop(e, dmg, j, b);
+                }
+            }
+
+            if (b.timer <= 0) playerBullets.splice(i, 1);
+            continue;
+        }
+
+        // 残光トレイルパーティクル生成 (爽快感強化)
+        if (Math.random() > 0.2) {
+            particles.push({
+                type: 'spark', x: b.x, y: b.y, vx: (Math.random() - 0.5) * 2, vy: (Math.random() - 0.5) * 2,
+                size: Math.random() * 4 + 1.5, color: b.color || '#00ffff', alpha: 0.6, decay: 0.04
+            });
+        }
+
+        // 各弾種の移動・寿命ロジック
+        if (b.type === 'homing') {
+            if (!b.life) b.life = 150; // ライフ未設定時のセーフティ
+            b.life--;
+            if (enemies.length > 0) {
+                let target = enemies[0];
+                let targetAngle = Math.atan2(target.y - b.y, target.x - b.x);
+                let diff = targetAngle - b.angle;
+                diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+                if (!b.rotSpeed) b.rotSpeed = 0.08;
+                b.angle += Math.max(-b.rotSpeed, Math.min(b.rotSpeed, diff));
+                b.vx = Math.cos(b.angle) * 7.5;
+                b.vy = Math.sin(b.angle) * 7.5;
+            }
+            b.x += b.vx; b.y += b.vy;
+        } else if (b.type === 'straight' || b.type === 'fireworks') {
+            b.x += b.vx; b.y += b.vy;
+        } else if (b.type === 'magnum') {
+            // マグナムに時限タイマー（初期設定がなければ60フレーム＝1秒に設定）
+            if (b.timer === undefined) b.timer = 60;
+            b.timer--;
+            b.x += b.vx; b.y += b.vy;
+
+            // ⏱️ 1秒経過で自動空中爆発
+            if (b.timer <= 0) {
+                triggerMagnumExplosion(b.x, b.y, b.damage || Math.round(player.baseDamage * 2.5));
+                playerBullets.splice(i, 1);
+                continue;
+            }
+        }
+
+        // 目立たせるネオン・大サイズ描画
+        ctx.shadowBlur = 20; ctx.shadowColor = b.color; ctx.fillStyle = b.color;
+        ctx.beginPath(); ctx.arc(b.x, b.y, b.size, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath(); ctx.arc(b.x, b.y, b.size * 0.4, 0, Math.PI*2); ctx.fill();
+
+        // 画面外または特殊寿命の削除
+        if (b.x < -40 || b.x > canvas.width + 40 || b.y < -40 || b.y > canvas.height + 40 || (b.life !== undefined && b.life <= 0)) {
+            playerBullets.splice(i, 1);
+            continue;
+        }
+
+        // 敵との当たり判定
+        for (let j = enemies.length - 1; j >= 0; j--) {
+            let e = enemies[j];
+            let dist = Math.hypot(b.x - e.x, b.y - e.y);
+            let hitRadius = e === boss ? e.size : e.size / 1.2;
+
+            if (dist < hitRadius + b.size) {
+                // 花火が同じ敵に連続ヒットするのを防止
+                if (b.type === 'fireworks') {
+                    if (!b.hitEnemies) b.hitEnemies = [];
+                    if (b.hitEnemies.includes(e)) continue;
+                    b.hitEnemies.push(e);
+                }
+
+                // マグナムは直撃時に即時大爆発
+                if (b.type === 'magnum') {
+                    triggerMagnumExplosion(b.x, b.y, b.damage || Math.round(player.baseDamage * 2.5));
+                } else if (b.type !== 'fireworks') {
+                    // 通常弾の基礎ダメージ計算
+                    let dmgMultiplier = b.type === 'straight' ? 2.0 : (b.type === 'homing' ? 1.5 : 1.0);
+                    let dmg = b.damage || Math.round(player.baseDamage * dmgMultiplier);
+                    damageEnemyInLoop(e, dmg, j, b);
+                } else {
+                    // 花火弾のダメージ処理
+                    let dmg = b.damage || Math.round(player.baseDamage * 1.2);
+                    damageEnemyInLoop(e, dmg, j, b);
+                }
+
+                playerBullets.splice(i, 1);
+                bulletRemoved = true;
+                updateUI();
+                break;
+            }
+        }
+        if (bulletRemoved) continue;
+    }
+
+    // パーティクルの更新 (スロー適用)
+    for (let i = particles.length - 1; i >= 0; i--) {
+        let p = particles[i];
+        
+        if (p.type === 'ring') {
+            p.radius += (p.speed || 4.5) * ts;
+            p.alpha -= p.decay * ts;
+            ctx.shadowBlur = 15; ctx.shadowColor = p.color;
+            ctx.strokeStyle = `rgba(${p.rgb || '255, 234, 0'}, ${p.alpha})`;
+            ctx.lineWidth = p.lineWidth || 4;
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI*2); ctx.stroke();
+            if (p.alpha <= 0 || p.radius >= p.maxRadius) particles.splice(i, 1);
+            continue;
+        }
+
+        p.x += p.vx * ts; p.y += p.vy * ts; p.alpha -= p.decay * ts;
+        if (p.alpha <= 0) { particles.splice(i, 1); continue; }
+
+        ctx.shadowBlur = 10; ctx.shadowColor = p.color;
+        ctx.fillStyle = p.color; ctx.globalAlpha = p.alpha;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI*2); ctx.fill();
+        ctx.globalAlpha = 1.0; 
+    }
+
+    // ダメージポップ・テキストの更新
+    for (let i = texts.length - 1; i >= 0; i--) {
+        let t = texts[i];
+        t.x += t.vx; 
+        t.y += t.vy;
+        t.vy += t.gravity;
+        t.alpha -= 0.025;
+
+        if (t.alpha <= 0) { texts.splice(i, 1); continue; }
+
+        ctx.save();
+        ctx.globalAlpha = t.alpha;
+        
+        ctx.font = "bold " + t.size + "px 'Arial Black', Meiryo, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+
+        ctx.shadowBlur = 0; 
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 5;
+        ctx.strokeText(t.text, t.x, t.y);
+
+        ctx.shadowBlur = 10; 
+        ctx.shadowColor = t.color;
+        ctx.fillStyle = t.color;
+        ctx.fillText(t.text, t.x, t.y);
+        
+        ctx.restore();
+    }
+
+    ctx.restore();
+    
+ // 👈 ボスがいない（boss === null）かつ 警告中でない（bossWarningTimer === 0）条件を追加
+if (enemies.length === 0 && enemiesSpawnedInWave >= totalEnemiesForWave && gameState === "battle" && !boss && juice.bossWarningTimer === 0) {
+    endBattlePhase();
+}
+
+    requestAnimationFrame(loop);
+
+    // ==================== 以下、ループ内連動の内部カスタム関数 ====================
+    
+   // 💥 マグナム専用の大爆発・広域衝撃波ロジック（軽量・円の輪メイン版）
+    function triggerMagnumExplosion(ex, ey, dmg) {
+        let explosionRadius = 145; // 爆発広域判定のサイズ
+
+        // 1. 丸のパーティクルは「ほどほど（大幅に削減）」にして軽快に
+        createExplosion(ex, ey, '#ff6600', 8, 5); // 35発 → 8発に削減
+        createExplosion(ex, ey, '#ffcc00', 4, 3); // 15発 → 4発に削減
+
+        // 2. 主役：新設の「円の輪（ショックウェーブリング）」をクッキリ1枚発生
+        particles.push({
+            type: 'ring',
+            x: ex, y: ey,
+            radius: 12,
+            maxRadius: explosionRadius,
+            lineWidth: 5,         // 少し太くして存在感をアップ
+            color: '#ffaa00',
+            rgb: '255, 130, 0',   // より鮮やかなオレンジネオン
+            alpha: 1.0,
+            decay: 0.04,          // ほんの少しだけ消えるのを遅くして余韻を出す
+            speed: 6.5
+        });
+
+        // 3. 爆発範囲内に巻き込まれた全エネミーにダメージ判定
+        for (let j = enemies.length - 1; j >= 0; j--) {
+            let e = enemies[j];
+            let dist = Math.hypot(e.x - ex, e.y - ey);
+            let hitRadius = e === boss ? e.size : e.size / 1.2;
+
+            if (dist < explosionRadius + hitRadius) {
+                damageEnemyInLoop(e, dmg, j, { type: 'magnum' });
+            }
+        }
+    }
+
+   // ⚔️ 敵へのダメージ処理 ＆ 花火の即時連鎖（ヒット時発動版）ロジック
+   function damageEnemyInLoop(e, dmg, index, originalBullet) {
+    if (e.hp <= 0) return; // 既に死んでいる場合は重複処理を防止
+
+    e.hp -= dmg;
+
+    // 🛡️ ヒット時パーティクルの最大存在数リミッター
+    // 現在画面にあるパーティクルのうち、ヒット火花（色: '#00ffff'）の数をカウント
+    let currentHitParticles = particles.filter(p => p.color === '#00ffff').length;
+
+    // 1回のヒットで6個出るので、「5ヒット分 ＝ 30個」を超えていなければ火花を出す
+    if (currentHitParticles < (5 * 6)) {
+        createExplosion(e.x, e.y, '#00ffff', 6, 3);
+    }
+    
+    createPopText(e.x, e.y, `${dmg}`, '#ff3300', true);
+
+    // 🎆 【修正】花火（fireworks）の連鎖システム：敵の生死に関わらず「当たったらすぐ」発動！
+    if (originalBullet && originalBullet.type === 'fireworks') {
+        let currentChain = originalBullet.chainCount || 0;
+        let maxChain = 5; // 最大5回まで連鎖
+
+        if (currentChain < maxChain && enemies.length > 1) {
+            let nextTarget = null;
+            let minDist = 999999;
+
+            // 今回当たった敵（e）自身も「ヒット済みリスト」に加える
+            let updatedHitList = [...(originalBullet.hitEnemies || []), e];
+
+            // まだこの花火が当たっていない、最も近い別の敵を検索
+            enemies.forEach(nextEnemy => {
+                if (updatedHitList.includes(nextEnemy)) return; // すでに当たった敵はスルー
+                if (nextEnemy.hp <= 0) return; // すでに死んでいる敵もスルー
+
+                let d = Math.hypot(nextEnemy.x - e.x, nextEnemy.y - e.y);
+                if (d < minDist) {
+                    minDist = d;
+                    nextTarget = nextEnemy;
+                }
+            });
+
+            // 次のターゲット（まだ当たっていない敵）が見つかれば連鎖弾を発射！
+            if (nextTarget) {
+                let angle = Math.atan2(nextTarget.y - e.y, nextTarget.x - e.x);
+                playerBullets.push({
+                    type: 'fireworks',
+                    x: e.x,
+                    y: e.y,
+                    vx: Math.cos(angle) * 15, // 高速で次の敵へ
+                    vy: Math.sin(angle) * 15,
+                    color: '#ff00ff',
+                    size: 8,
+                    damage: Math.round(dmg * 1.1), // 連鎖するごとに少し威力アップ
+                    chainCount: currentChain + 1,
+                    hitEnemies: updatedHitList // 更新したヒット済みリストを次の弾に引き継ぐ
+                });
+
+                // 連鎖の爽快テキストをポップ
+                createPopText(e.x, e.y - 40, `CHAIN ${currentChain + 1}`, '#ff00ff', false);
+            }
+        }
+    }
+
+    if (e.hp <= 0) {
+        dropMoney(e.x, e.y, e === boss ? 40 : 5);
+        createExplosion(e.x, e.y, e.color, 3, 7);
+        createPopText(e.x, e.y - 20, "DESTROYED", "#ff0055");
+
+        // ボスなら強制ウェーブ終了
+        if (e === boss) {
+            enemies.splice(index, 1);
+            boss = null;
+
+            enemyBullets = []; // 残弾消去（任意）
+            endBattlePhase();
+            return;
+        }
+
+        enemies.splice(index, 1);
+    }
+}
+if (boss === null) {
+   }
+}
+
+        resetGame();
+        loop();
+    </script>
+</body>
+</html>
